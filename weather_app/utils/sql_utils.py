@@ -3,7 +3,7 @@ import logging
 import os
 import sqlite3
 
-from air_quality.utils.logger import configure_logger
+from weather_app.utils.logger import configure_logger
 
 
 logger = logging.getLogger(__name__)
