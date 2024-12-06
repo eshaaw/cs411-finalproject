@@ -25,62 +25,77 @@ class FavoritesModel:
             user_id (int): The ID of the user whose favorites are being managed.
         """
         self.user_id = user_id
-        self.favorites: List[Location] = self.load_favorites()
+        self.favorites: List[Location] = []
 
     ##################################################
     # Favorite Management Functions
     ##################################################
 
-    def add_favorite(self, location: Location) -> None:
+    def add_location_to_favorites(self, location: Location) -> None:
         """
-        Adds a location to the user's favorites.
+        Adds a location to the favorites.
 
         Args:
             location (Location): The location to add to the favorites.
 
         Raises:
-            ValueError: If the location is already in the user's favorites.
+            TypeError: If the location is not a valid Location instance.
+            ValueError: If a location with the same 'id' already exists.
         """
-        logger.info("Adding location %s to favorites", location.city)
-        if location.id in [fav.id for fav in self.favorites]:
-            logger.error("Location %s is already in favorites", location.city)
-            raise ValueError(f"Location {location.city} is already in favorites.")
+        logger.info("Adding new location to favorites")
+        if not isinstance(location, Location):
+            logger.error("Location is not a valid Location instance")
+            raise TypeError("Location is not a valid Location instance")
 
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                INSERT INTO favorite_locations (user_id, city, latitude, longitude)
-                VALUES (?, ?, ?, ?)
-            """, (self.user_id, location.city, location.latitude, location.longitude))
-            conn.commit()
-            location.id = cursor.lastrowid
+        location_id = self.validate_location_id(location.id, check_in_favorites=False)
+        if location_id in [favorite.id for favorite in self.favorites]:
+            logger.error("Location with ID %d already exists in favorites", location.id)
+            raise ValueError(f"Location with ID {location.id} already exists in favorites")
 
         self.favorites.append(location)
 
-    def remove_favorite(self, location_id: int) -> None:
+    def remove_location_by_location_id(self, location_id: int) -> None:
         """
-        Removes a location from the user's favorites by its ID.
+        Removes a location from favorites by its location ID.
 
         Args:
-            location_id (int): The ID of the location to remove.
+            location_id (int): The ID of the location to remove from favorites.
 
         Raises:
-            ValueError: If the location is not found in the user's favorites.
+            ValueError: If the favorites list is empty or the location ID is invalid.
         """
         logger.info("Removing location with ID %d from favorites", location_id)
-        if location_id not in [fav.id for fav in self.favorites]:
-            logger.error("Location with ID %d not found in favorites", location_id)
-            raise ValueError(f"Location with ID {location_id} not found in favorites.")
+        self.check_if_empty()
+        location_id = self.validate_location_id(location_id)
+        self.favorites = [
+            location for location in self.favorites if location.id != location_id
+        ]
+        logger.info("Location with ID %d has been removed", location_id)
 
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                DELETE FROM favorite_locations
-                WHERE id = ? AND user_id = ?
-            """, (location_id, self.user_id))
-            conn.commit()
+    def remove_location_by_city_name(self, city: str) -> None:
+        """
+        Removes a location from favorites by its city name.
 
-        self.favorites = [fav for fav in self.favorites if fav.id != location_id]
+        Args:
+            city (str): The city name of the location to remove from favorites.
+
+        Raises:
+            ValueError: If the favorites list is empty or the city is not found in favorites.
+        """
+        logger.info("Removing location with city '%s' from favorites", city)
+        self.check_if_empty()
+
+        # Validate the city name exists in favorites
+        matching_locations = [location for location in self.favorites if location.city == city]
+        if not matching_locations:
+            logger.error("City '%s' is not in favorites", city)
+            raise ValueError(f"City '{city}' is not in favorites")
+
+        # Remove all locations matching the city name
+        self.favorites = [
+            location for location in self.favorites if location.city != city
+        ]
+        logger.info("Location(s) with city '%s' have been removed", city)
 
     ##################################################
     # Favorites Retrieval Functions
@@ -93,7 +108,8 @@ class FavoritesModel:
         Returns:
             List[Location]: The user's favorite locations.
         """
-        logger.info("Retrieving all favorites for user ID %d", self.user_id)
+        self.check_if_empty()
+        logger.info("Getting all favorite locations for user ID %d", self.user_id)
         return self.favorites
 
     def get_favorite_by_id(self, location_id: int) -> Location:
@@ -109,33 +125,49 @@ class FavoritesModel:
         Returns:
             Location: The requested favorite location.
         """
-        logger.info("Retrieving favorite location with ID %d", location_id)
-        for location in self.favorites:
-            if location.id == location_id:
-                return location
-
-        logger.error("Location with ID %d not found in favorites", location_id)
-        raise ValueError(f"Location with ID {location_id} not found in favorites.")
+        self.check_if_empty()
+        logger.info("Getting location with ID %d", location_id)
+        return next((location for location in self.favorites if location.id == location_id), None)
 
     ##################################################
     # Utility Functions
     ##################################################
 
-    def load_favorites(self) -> List[Location]:
+    def check_if_empty(self) -> None:
         """
-        Loads the user's favorite locations from the database.
+        Checks if the favorites list is empty, logs an error, and raises a ValueError if it is.
 
-        Returns:
-            List[Location]: The user's favorite locations.
+        Raises:
+            ValueError: If the favorites list is empty.
         """
-        logger.info("Loading favorites for user ID %d", self.user_id)
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT id, city, latitude, longitude
-                FROM favorite_locations
-                WHERE user_id = ?
-            """, (self.user_id,))
-            rows = cursor.fetchall()
+        if not self.favorites:
+            logger.error("Favorites list is empty")
+            raise ValueError("Favorites list is empty")
 
-        return [Location(id=row[0], city=row[1], latitude=row[2], longitude=row[3]) for row in rows]
+    def validate_location_id(self, location_id: int, check_in_favorites: bool = True) -> int:
+        """
+        Validates the given location ID, ensuring it is a non-negative integer.
+
+        Args:
+            location_id (int): The location ID to validate.
+            check_in_favorites (bool, optional): If True, checks if the location ID exists in the favorites.
+                                                 If False, skips the check. Defaults to True.
+
+        Raises:
+            ValueError: If the location ID is not valid or not found in favorites.
+        """
+        try:
+            location_id = int(location_id)
+            if location_id < 0:
+                logger.error("Invalid location ID %d", location_id)
+                raise ValueError(f"Invalid location ID: {location_id}")
+        except ValueError:
+            logger.error("Invalid location ID %s", location_id)
+            raise ValueError(f"Invalid location ID: {location_id}")
+
+        if check_in_favorites:
+            if location_id not in [location.id for location in self.favorites]:
+                logger.error("Location with ID %d not found in favorites", location_id)
+                raise ValueError(f"Location with ID {location_id} not found in favorites")
+
+        return location_id
