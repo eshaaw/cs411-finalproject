@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 import logging
-from utils.api_utils import fetch_air_quality_data, fetch_historical_data, fetch_forecast
-from utils.sql_utils import get_db_connection
-from utils.logger import configure_logger
+from weather_app.utils.api_utils import fetch_air_quality_data, fetch_historical_data, fetch_forecast
+from weather_app.utils.sql_utils import get_db_connection
+from weather_app.utils.logger import configure_logger
 
 logger = logging.getLogger(__name__)
 configure_logger(logger)

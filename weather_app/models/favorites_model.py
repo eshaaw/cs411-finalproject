@@ -1,8 +1,8 @@
 import logging
 from typing import List
-from location_model import LocationModel
-from utils.sql_utils import get_db_connection
-from utils.logger import configure_logger
+from weather_app.models.location_model import Location
+from weather_app.utils.sql_utils import get_db_connection
+from weather_app.utils.logger import configure_logger
 
 logger = logging.getLogger(__name__)
 configure_logger(logger)
@@ -25,7 +25,7 @@ class FavoritesModel:
             user_id (int): The ID of the user whose favorites are being managed.
         """
         self.user_id = user_id
-        self.favorites: List[Location] = self._load_favorites()
+        self.favorites: List[Location] = self.load_favorites()
 
     ##################################################
     # Favorite Management Functions
