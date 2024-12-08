@@ -39,7 +39,7 @@ def login():
     try:
         # Fetch the user from the database
         with get_db_connection() as conn:
-            user = Users.get_user_by_username(username, conn)
+            user = Users.get_id_by_username(username, conn)
             if not user:
                 return jsonify({"error": "Invalid username or password"}), 401
 

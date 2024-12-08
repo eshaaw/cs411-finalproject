@@ -2,6 +2,7 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock
 from flask import Flask
 from weather_app.models.login_route import login, auth_bp
+from weather_app.models.user_model import Users
 
 from werkzeug.security import generate_password_hash
 
@@ -24,12 +25,12 @@ def test_login_success(client):
     password = "password123"
     password_hash = generate_password_hash(password, method="pbkdf2:sha256")  # Explicit hashing method
 
-    with patch("weather_app.login_route.get_db_connection") as mock_get_db_connection:
-        # Mock the database connection and User.get_user_by_username
+    with patch("weather_app.models.login_route.get_db_connection") as mock_get_db_connection:
+        # Mock the database connection and User.get_id_by_username
         mock_conn = MagicMock()
         mock_get_db_connection.return_value.__enter__.return_value = mock_conn
 
-        with patch("weather_app.models.user_model.User.get_user_by_username") as mock_get_user:
+        with patch("weather_app.models.user_model.Users.get_id_by_username") as mock_get_user:
             mock_user = MagicMock()
             mock_user.password_hash = password_hash
             mock_get_user.return_value = mock_user
@@ -46,12 +47,12 @@ def test_login_invalid_password(client):
     password = "wrongpassword"
     password_hash = generate_password_hash("correctpassword", method="pbkdf2:sha256")  # Explicit hashing method
 
-    with patch("weather_app.login_route.get_db_connection") as mock_get_db_connection:
+    with patch("weather_app.models.login_route.get_db_connection") as mock_get_db_connection:
         # Mock the database connection and User.get_user_by_username
         mock_conn = MagicMock()
         mock_get_db_connection.return_value.__enter__.return_value = mock_conn
 
-        with patch("weather_app.models.user_model.User.get_user_by_username") as mock_get_user:
+        with patch("weather_app.models.user_model.Users.get_id_by_username") as mock_get_user:
             mock_user = MagicMock()
             mock_user.password_hash = password_hash
             mock_get_user.return_value = mock_user
@@ -67,12 +68,12 @@ def test_login_user_not_found(client):
     username = "nonexistentuser"
     password = "password123"
 
-    with patch("weather_app.login_route.get_db_connection") as mock_get_db_connection:
+    with patch("weather_app.models.login_route.get_db_connection") as mock_get_db_connection:
         # Mock the database connection and User.get_user_by_username
         mock_conn = MagicMock()
         mock_get_db_connection.return_value.__enter__.return_value = mock_conn
 
-        with patch("weather_app.models.user_model.User.get_user_by_username") as mock_get_user:
+        with patch("weather_app.models.user_model.Users.get_id_by_username") as mock_get_user:
             mock_get_user.return_value = None
 
             # Make a POST request to the login route
@@ -93,7 +94,7 @@ def test_login_server_error(client):
     username = "testuser"
     password = "password123"
 
-    with patch("weather_app.login_route.get_db_connection", side_effect=Exception("Database error")):
+    with patch("weather_app.models.login_route.get_db_connection", side_effect=Exception("Database error")):
         # Make a POST request to the login route
         response = client.post("/login", json={"username": username, "password": password})
 
