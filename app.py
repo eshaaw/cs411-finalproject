@@ -1,43 +1,37 @@
-from flask import Flask, jsonify, make_response, Response, request
 from dotenv import load_dotenv
+from flask import Flask, jsonify, make_response, Response, request
 from werkzeug.exceptions import BadRequest, Unauthorized
+from werkzeug.security import check_password_hash
+from weather_app.models.user_model import Users
+from weather_app.utils.sql_utils import get_db_connection
+from weather_app.utils.db import db
+from weather_app.models.login_route import auth_bp
 
-from config import ProductionConfig
-from weather_app.models.favorites_model import FavoritesModel
-from weather_app.models.location_model import Location
-from weather_app.models.user_model import User
-from weather_app.utils import db
-import os
-
-# Load environment variables from .env
+# Load environment variables from .env file
 load_dotenv()
 
-app = Flask(__name__)
 
-# Set configuration from environment variables
-app.config['ENV'] = os.getenv('FLASK_ENV')
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
-
-# Access API settings
-API_URL = os.getenv('API_URL')
-API_KEY = os.getenv('API_KEY')
-
-
-def create_app(config_class=ProductionConfig):
+def create_app():
+    """
+    Factory function to create and configure the Flask application.
+    """
     app = Flask(__name__)
-    app.config.from_object(config_class)
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///weather_app.db'
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-    db.init_app(app)  # Initialize db with app
+    db.init_app(app)  # Initialize database
     with app.app_context():
-        db.create_all()  # Recreate all tables
+        db.create_all()  # Create tables if they don't exist
 
-    favorites_model = FavoritesModel()
+    # Register Blueprints
+    app.register_blueprint(auth_bp)
 
     ####################################################
     #
-    # Healthchecks
+    # Healthcheck
     #
     ####################################################
+
     @app.route('/api/health', methods=['GET'])
     def healthcheck() -> Response:
         """
@@ -49,11 +43,11 @@ def create_app(config_class=ProductionConfig):
         app.logger.info('Health check')
         return make_response(jsonify({'status': 'healthy'}), 200)
 
-    ##########################################################
+    ####################################################
     #
-    # User management
+    # User Management
     #
-    ##########################################################
+    ####################################################
 
     @app.route('/api/create-user', methods=['POST'])
     def create_user() -> Response:
@@ -66,31 +60,24 @@ def create_app(config_class=ProductionConfig):
 
         Returns:
             JSON response indicating the success of user creation.
-        Raises:
-            400 error if input validation fails.
-            500 error if there is an issue adding the user to the database.
         """
-        app.logger.info('Creating new user')
+        app.logger.info('Creating a new user')
         try:
-            # Get the JSON data from the request
             data = request.get_json()
-
-            # Extract and validate required fields
             username = data.get('username')
             password = data.get('password')
 
             if not username or not password:
-                return make_response(jsonify({'error': 'Invalid input, both username and password are required'}), 400)
+                raise BadRequest("Invalid input. Both username and password are required.")
 
-            # Call the User function to add the user to the database
-            app.logger.info('Adding user: %s', username)
             Users.create_user(username, password)
-
-            app.logger.info("User added: %s", username)
+            app.logger.info("User added successfully: %s", username)
             return make_response(jsonify({'status': 'user added', 'username': username}), 201)
+
         except Exception as e:
             app.logger.error("Failed to add user: %s", str(e))
             return make_response(jsonify({'error': str(e)}), 500)
+
     @app.route('/api/delete-user', methods=['DELETE'])
     def delete_user() -> Response:
         """
@@ -101,113 +88,105 @@ def create_app(config_class=ProductionConfig):
 
         Returns:
             JSON response indicating the success of user deletion.
-        Raises:
-            400 error if input validation fails.
-            500 error if there is an issue deleting the user from the database.
         """
         app.logger.info('Deleting user')
         try:
-            # Get the JSON data from the request
             data = request.get_json()
-
-            # Extract and validate required fields
             username = data.get('username')
 
             if not username:
-                return make_response(jsonify({'error': 'Invalid input, username is required'}), 400)
+                raise BadRequest("Invalid input. Username is required.")
 
-            # Call the User function to delete the user from the database
-            app.logger.info('Deleting user: %s', username)
             Users.delete_user(username)
-
-            app.logger.info("User deleted: %s", username)
+            app.logger.info("User deleted successfully: %s", username)
             return make_response(jsonify({'status': 'user deleted', 'username': username}), 200)
+
         except Exception as e:
             app.logger.error("Failed to delete user: %s", str(e))
             return make_response(jsonify({'error': str(e)}), 500)
 
     @app.route('/api/login', methods=['POST'])
-    def login():
+    def login() -> Response:
         """
-        Route to log in a user and load their combatants.
+        Route to authenticate a user.
 
         Expected JSON Input:
             - username (str): The username of the user.
-            - password (str): The user's password.
+            - password (str): The password of the user.
 
         Returns:
-            JSON response indicating the success of the login.
-
-        Raises:
-            400 error if input validation fails.
-            401 error if authentication fails (invalid username or password).
-            500 error for any unexpected server-side issues.
+            JSON response indicating the success or failure of authentication.
         """
-        data = request.get_json()
-        if not data or 'username' not in data or 'password' not in data:
-            app.logger.error("Invalid request payload for login.")
-            raise BadRequest("Invalid request payload. 'username' and 'password' are required.")
-
-        username = data['username']
-        password = data['password']
-
+        app.logger.info('User login attempt')
         try:
-            # Validate user credentials
-            if not User.check_password(username, password):
-                app.logger.warning("Login failed for username: %s", username)
-                raise Unauthorized("Invalid username or password.")
+            data = request.get_json()
+            username = data.get('username')
+            password = data.get('password')
 
-            # Get user ID
-            user_id = User.get_id_by_username(username)
+            if not username or not password:
+                raise BadRequest("Invalid input. Username and password are required.")
 
-            # Load user into the model
-            login_user(user_id, user_model)
+            with get_db_connection() as conn:
+                user = Users.query.filter_by(username=username).first()
+                if not user or not check_password_hash(user.password, password):
+                    raise Unauthorized("Invalid username or password.")
 
-            app.logger.info("User %s logged in successfully.", username)
-            return jsonify({"message": f"User {username} logged in successfully."}), 200
+            app.logger.info("User logged in successfully: %s", username)
+            return jsonify({'message': 'Login successful'}), 200
 
         except Unauthorized as e:
-            return jsonify({"error": str(e)}), 401
+            app.logger.warning(str(e))
+            return jsonify({'error': str(e)}), 401
+
         except Exception as e:
-            app.logger.error("Error during login for username %s: %s", username, str(e))
-            return jsonify({"error": "An unexpected error occurred."}), 500
+            app.logger.error("Login failed: %s", str(e))
+            return jsonify({'error': "An unexpected error occurred."}), 500
 
+    ####################################################
+    #
+    # Database Management
+    #
+    ####################################################
 
-    @app.route('/api/logout', methods=['POST'])
-    def logout():
+    @app.route('/api/init-db', methods=['POST'])
+    def init_db():
         """
-        Route to log out a user and save their combatants to MongoDB.
-
-        Expected JSON Input:
-            - username (str): The username of the user.
+        Route to initialize the database.
 
         Returns:
-            JSON response indicating the success of the logout.
-
-        Raises:
-            400 error if input validation fails or user is not found in MongoDB.
-            500 error for any unexpected server-side issues.
+            JSON response indicating the success of the operation.
         """
-        data = request.get_json()
-        if not data or 'username' not in data:
-            app.logger.error("Invalid request payload for logout.")
-            raise BadRequest("Invalid request payload. 'username' is required.")
-
-        username = data['username']
-
         try:
-            # Get user ID
-            user_id = User.get_id_by_username(username)
+            with app.app_context():
+                app.logger.info("Initializing database.")
+                db.drop_all()
+                db.create_all()
+            return jsonify({"status": "success", "message": "Database initialized successfully."}), 200
 
-            # Save user and clear the  model
-            logout_user(user_id, user_model)
-
-            app.logger.info("User %s logged out successfully.", username)
-            return jsonify({"message": f"User {username} logged out successfully."}), 200
-
-        except ValueError as e:
-            app.logger.warning("Logout failed for username %s: %s", username, str(e))
-            return jsonify({"error": str(e)}), 400
         except Exception as e:
-            app.logger.error("Error during logout for username %s: %s", username, str(e))
-            return jsonify({"error": "An unexpected error occurred."}), 500
+            app.logger.error("Failed to initialize database: %s", str(e))
+            return jsonify({"status": "error", "message": "Failed to initialize database."}), 500
+
+    ####################################################
+    #
+    # Weather Endpoints (Placeholder)
+    #
+    ####################################################
+
+    @app.route('/api/weather', methods=['GET'])
+    def get_weather():
+        """
+        Placeholder route for fetching weather data.
+
+        Returns:
+            JSON response with mock weather data.
+        """
+        app.logger.info("Fetching weather data.")
+        return jsonify({"status": "success", "weather": "Sunny, 25°C"}), 200
+
+    return app
+
+
+if __name__ == "__main__":
+    app = create_app()
+    app.run(debug=True, host="0.0.0.0", port=5000)
