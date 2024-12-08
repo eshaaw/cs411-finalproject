@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from werkzeug.security import check_password_hash
-from models.user_model import User
-from utils.sql_utils import get_db_connection
+from weather_app.models.user_model import Users
+from weather_app.utils.sql_utils import get_db_connection
 
 # Define a Blueprint for authentication-related routes
 auth_bp = Blueprint('auth', __name__)
@@ -39,7 +39,7 @@ def login():
     try:
         # Fetch the user from the database
         with get_db_connection() as conn:
-            user = User.get_user_by_username(username, conn)
+            user = Users.get_user_by_username(username, conn)
             if not user:
                 return jsonify({"error": "Invalid username or password"}), 401
 

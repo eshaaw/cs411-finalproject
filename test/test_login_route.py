@@ -1,8 +1,9 @@
 import pytest
 from unittest.mock import Mock, patch, MagicMock
 from flask import Flask
+from weather_app.models.login_route import login, auth_bp
+
 from werkzeug.security import generate_password_hash
-from weather_app.models.login_route import auth_bp
 
 @pytest.fixture
 def app():
@@ -21,7 +22,7 @@ def test_login_success(client):
     """Test a successful login."""
     username = "testuser"
     password = "password123"
-    password_hash = generate_password_hash(password)
+    password_hash = generate_password_hash(password, method="pbkdf2:sha256")  # Explicit hashing method
 
     with patch("weather_app.login_route.get_db_connection") as mock_get_db_connection:
         # Mock the database connection and User.get_user_by_username
@@ -43,7 +44,7 @@ def test_login_invalid_password(client):
     """Test login with an invalid password."""
     username = "testuser"
     password = "wrongpassword"
-    password_hash = generate_password_hash("correctpassword")
+    password_hash = generate_password_hash("correctpassword", method="pbkdf2:sha256")  # Explicit hashing method
 
     with patch("weather_app.login_route.get_db_connection") as mock_get_db_connection:
         # Mock the database connection and User.get_user_by_username
