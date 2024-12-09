@@ -81,8 +81,15 @@ class Users(db.Model):
         if not user:
             logger.info("User %s not found", username)
             raise ValueError(f"User {username} not found")
+
+        # Retrieve the stored salt and hash the input password with the stored salt
         hashed_password = hashlib.sha256((password + user.salt).encode()).hexdigest()
+
+        # Compare the hashed password with the stored password
         return hashed_password == user.password
+
+    
+    
 
     @classmethod
     def delete_user(cls, username: str) -> None:
@@ -99,9 +106,15 @@ class Users(db.Model):
         if not user:
             logger.info("User %s not found", username)
             raise ValueError(f"User {username} not found")
-        db.session.delete(user)
-        db.session.commit()
-        logger.info("User %s deleted successfully", username)
+        
+        try:
+            db.session.delete(user)  # Mark the user for deletion
+            db.session.commit()  # Commit the transaction to delete the user
+            logger.info("User %s deleted successfully", username)
+        except Exception as e:
+            db.session.rollback()  # Rollback the session if an error occurs
+            logger.error("Error deleting user %s: %s", username, str(e))
+            raise
 
     @classmethod
     def get_id_by_username(cls, username: str) -> int:

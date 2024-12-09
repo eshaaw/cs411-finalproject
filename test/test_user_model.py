@@ -49,21 +49,25 @@ def test_create_user_duplicate_username(app, mock_db_session):
         mock_db_session.rollback.assert_called_once()
 
 
-def test_check_password_success(app, mock_db_session):
+def test_check_password_success(app):
     """Test password validation for an existing user."""
     user = MagicMock()
-    user.salt = "salt123"
-    user.password = "hashedpassword123"
+    user.salt = "random_salt"
+    user.password = "hashed_password_123"
 
-    with patch("weather_app.models.user_model.Users.query.filter_by") as mock_query, \
-         patch("hashlib.sha256") as mock_hash:
-        mock_query.return_value.first.return_value = user
-        # Ensure the mock hash function returns the correct hashed password
-        mock_hash.return_value.hexdigest.return_value = "hashedpassword123"  # This should match the user's stored password hash
+    with patch("weather_app.models.user_model.Users.query") as mock_query, \
+         patch("hashlib.sha256") as mock_sha256:
+        
+        mock_query.filter_by.return_value.first.return_value = user  # Correctly chain return values
+        mock_sha256.return_value.hexdigest.return_value = "hashed_password_123"
 
         with app.app_context():
-            result = Users.check_password("testuser", "securepassword")
+            result = Users.check_password("testuser", "correct_password")
             assert result is True
+
+    mock_query.filter_by.assert_called_once_with(username="testuser")
+    mock_sha256.assert_called_once_with("correct_passwordrandom_salt".encode())
+
 
 
 
@@ -87,12 +91,15 @@ def test_delete_user_success(app, mock_db_session):
     """Test successful deletion of a user."""
     user = MagicMock()
 
-    with patch("weather_app.models.user_model.Users.query.filter_by") as mock_query:
-        mock_query.return_value.first.return_value = user
+    with patch("weather_app.models.user_model.Users.query") as mock_query:
+        mock_query.filter_by.return_value.first.return_value = user  # Correctly return the user object
+
         with app.app_context():
             Users.delete_user("testuser")
-            mock_db_session.delete.assert_called_once_with(user)  # Ensure delete is called with the user
-            mock_db_session.commit.assert_called_once()  # Ensure commit is called
+            mock_db_session.delete.assert_called_once_with(user)
+            mock_db_session.commit.assert_called_once()
+
+    mock_query.filter_by.assert_called_once_with(username="testuser")
 
 
 
@@ -103,7 +110,7 @@ def test_delete_user_not_found(app):
 
         with app.app_context():
             with pytest.raises(ValueError, match="User testuser not found"):
-                Users.delete_user("testuser") 
+                Users.delete_user("testuser")
 
 
 def test_update_password_success(app, mock_db_session):
@@ -112,15 +119,20 @@ def test_update_password_success(app, mock_db_session):
     user.salt = "oldsalt"
     user.password = "oldhashedpassword"
 
-    with patch("weather_app.models.user_model.Users.query.filter_by") as mock_query, \
+    with patch("weather_app.models.user_model.Users.query") as mock_query, \
          patch("weather_app.models.user_model.Users._generate_hashed_password", return_value=("newsalt", "newhashedpassword")):
-        mock_query.return_value.first.return_value = user
+        
+        mock_query.filter_by.return_value.first.return_value = user  # Mock user retrieval
+
         with app.app_context():
             Users.update_password("testuser", "newpassword")
-            assert user.salt == "newsalt"  # Assert the salt is updated
-            assert user.password == "newhashedpassword"  # Assert the password is updated
-            mock_db_session.commit.assert_called_once()  # Ensure commit is called
+            
+            # Validate the mock's attributes were updated
+            assert user.salt == "newsalt"
+            assert user.password == "newhashedpassword"
+            mock_db_session.commit.assert_called_once()
 
+    mock_query.filter_by.assert_called_once_with(username="testuser")
 
 
 
