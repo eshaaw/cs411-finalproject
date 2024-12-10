@@ -1,4 +1,8 @@
 # cs411-finalproject
+Weather App
+Overview
+The Weather App is a Flask-based application that provides weather data for cities worldwide using the OpenWeather API. It includes functionality to manage a user's collection of favorite locations and supports CRUD operations for favorites.
+
 Features
 1. User Management
 Create User: Register a new user with a username and password.

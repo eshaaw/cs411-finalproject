@@ -3,13 +3,18 @@ from flask import Flask, jsonify, make_response, Response, request
 from werkzeug.exceptions import BadRequest, Unauthorized
 from werkzeug.security import check_password_hash
 from weather_app.models.user_model import Users
+from weather_app.models.favorites_model import FavoritesModel
+from weather_app.models.location_model import Location
+from weather_app.models.login_route import auth_bp
+from weather_app.utils.sql_utils import check_database_connection
 from weather_app.utils.sql_utils import get_db_connection
 from weather_app.utils.db import db
-from weather_app.models.login_route import auth_bp
 import requests
+
 # Load environment variables from .env file
 load_dotenv()
 
+app = Flask(__name__)
 
 def create_app():
     """
@@ -26,187 +31,143 @@ def create_app():
     # Register Blueprints
     app.register_blueprint(auth_bp)
 
-    ####################################################
-    #
-    # Healthcheck
-    #
-    ####################################################
+# Register the login blueprint
+app.register_blueprint(auth_bp)
 
-    @app.route('/api/health', methods=['GET'])
-    def healthcheck() -> Response:
-        """
-        Health check route to verify the service is running.
+##################################################
+# Healthchecks
+##################################################
 
-        Returns:
-            JSON response indicating the health status of the service.
-        """
-        app.logger.info('Health check')
-        return make_response(jsonify({'status': 'healthy'}), 200)
+@app.route('/api/health', methods=['GET'])
+def healthcheck():
+    """
+    Health check endpoint to verify the app is running.
+    """
+    app.logger.info("Health check")
+    return make_response(jsonify({"status": "healthy"}), 200)
 
-    ####################################################
-    #
-    # User Management
-    #
-    ####################################################
 
-    @app.route('/api/create-user', methods=['POST'])
-    def create_user() -> Response:
-        """
-        Route to create a new user.
-
-        Expected JSON Input:
-            - username (str): The username for the new user.
-            - password (str): The password for the new user.
-
-        Returns:
-            JSON response indicating the success of user creation.
-        """
-        app.logger.info('Creating a new user')
-        try:
-            data = request.get_json()
-            username = data.get('username')
-            password = data.get('password')
-
-            if not username or not password:
-                raise BadRequest("Invalid input. Both username and password are required.")
-
-            Users.create_user(username, password)
-            app.logger.info("User added successfully: %s", username)
-            return make_response(jsonify({'status': 'user added', 'username': username}), 201)
-
-        except Exception as e:
-            app.logger.error("Failed to add user: %s", str(e))
-            return make_response(jsonify({'error': str(e)}), 500)
-
-    @app.route('/api/delete-user', methods=['DELETE'])
-    def delete_user() -> Response:
-        """
-        Route to delete a user.
-
-        Expected JSON Input:
-            - username (str): The username of the user to be deleted.
-
-        Returns:
-            JSON response indicating the success of user deletion.
-        """
-        app.logger.info('Deleting user')
-        try:
-            data = request.get_json()
-            username = data.get('username')
-
-            if not username:
-                raise BadRequest("Invalid input. Username is required.")
-
-            Users.delete_user(username)
-            app.logger.info("User deleted successfully: %s", username)
-            return make_response(jsonify({'status': 'user deleted', 'username': username}), 200)
-
-        except Exception as e:
-            app.logger.error("Failed to delete user: %s", str(e))
-            return make_response(jsonify({'error': str(e)}), 500)
-
-    @app.route('/api/login', methods=['POST'])
-    def login() -> Response:
-        """
-        Route to authenticate a user.
-
-        Expected JSON Input:
-            - username (str): The username of the user.
-            - password (str): The password of the user.
-
-        Returns:
-            JSON response indicating the success or failure of authentication.
-        """
-        app.logger.info('User login attempt')
-        try:
-            data = request.get_json()
-            username = data.get('username')
-            password = data.get('password')
-
-            if not username or not password:
-                raise BadRequest("Invalid input. Username and password are required.")
-
-            with get_db_connection() as conn:
-                user = Users.query.filter_by(username=username).first()
-                if not user or not check_password_hash(user.password, password):
-                    raise Unauthorized("Invalid username or password.")
-
-            app.logger.info("User logged in successfully: %s", username)
-            return jsonify({'message': 'Login successful'}), 200
-
-        except Unauthorized as e:
-            app.logger.warning(str(e))
-            return jsonify({'error': str(e)}), 401
-
-        except Exception as e:
-            app.logger.error("Login failed: %s", str(e))
-            return jsonify({'error': "An unexpected error occurred."}), 500
-
-    ####################################################
-    #
-    # Database Management
-    #
-    ####################################################
-
-    @app.route('/api/init-db', methods=['POST'])
-    def init_db():
-        """
-        Route to initialize the database.
-
-        Returns:
-            JSON response indicating the success of the operation.
-        """
-        try:
-            with app.app_context():
-                app.logger.info("Initializing database.")
-                db.drop_all()
-                db.create_all()
-            return jsonify({"status": "success", "message": "Database initialized successfully."}), 200
-
-        except Exception as e:
-            app.logger.error("Failed to initialize database: %s", str(e))
-            return jsonify({"status": "error", "message": "Failed to initialize database."}), 500
-
-    ####################################################
-    #
-    # Weather Endpoints (Placeholder)
-    #
-    ####################################################
-
-    @app.route('/api/weather', methods=['GET'])
-    def get_weather():
-        """
-        Placeholder route for fetching weather data.
-
-        Returns:
-            JSON response with mock weather data.
-        """
-        app.logger.info("Fetching weather data.")
-        return jsonify({"status": "success", "weather": "Sunny, 25°C"}), 200
-
-    return app
-
-app = Flask(__name__)
-
-OPENWEATHER_API_KEY = "2a53a7421f5ed14502cef8026fe343b5"
-OPENWEATHER_BASE_URL = "http://api.openweathermap.org/data/2.5/air_pollution"
-
-@app.route('/status', methods=['GET'])
-def status():
+@app.route('/api/db-check', methods=['GET'])
+def db_check():
+    """
+    Check if the database is reachable.
+    """
     try:
-        # Optionally check connectivity to OpenWeather API
-        response = requests.get(
-            OPENWEATHER_BASE_URL,
-            params={"q": "London", "appid": OPENWEATHER_API_KEY},
-            timeout=5
-        )
-        if response.status_code == 200:
-            return jsonify({"status": "ok", "message": "Application is running and connected to OpenWeather API"}), 200
-        else:
-            return jsonify({"status": "error", "message": "Failed to connect to OpenWeather API"}), 503
-    except requests.RequestException as e:
-        return jsonify({"status": "error", "message": "OpenWeather API is unreachable", "error": str(e)}), 503
+        app.logger.info("Checking database connection...")
+        check_database_connection()
+        return make_response(jsonify({"database_status": "healthy"}), 200)
+    except Exception as e:
+        app.logger.error(f"Database check failed: {e}")
+        return make_response(jsonify({"error": str(e)}), 500)
 
-if __name__ == "__main__":
-    app = create_app()
-    app.run(debug=True, host="0.0.0.0", port=5001)
+
+##################################################
+# Location Management
+##################################################
+
+@app.route('/api/location', methods=['POST'])
+def add_location():
+    """
+    Add a new location to the database.
+    """
+    data = request.get_json()
+    city = data.get('city')
+    latitude = data.get('latitude')
+    longitude = data.get('longitude')
+
+    if not city or latitude is None or longitude is None:
+        return make_response(jsonify({"error": "City, latitude, and longitude are required"}), 400)
+
+    try:
+        location = Location.create_location(city, latitude, longitude)
+        return make_response(jsonify({"status": "success", "location": location.to_dict()}), 201)
+    except Exception as e:
+        app.logger.error(f"Failed to add location: {e}")
+        return make_response(jsonify({"error": str(e)}), 500)
+
+
+@app.route('/api/location/<int:location_id>', methods=['GET'])
+def get_location(location_id):
+    """
+    Retrieve a location by ID.
+    """
+    try:
+        location = Location.get_location_by_id(location_id)
+        return make_response(jsonify(location.to_dict()), 200)
+    except ValueError as e:
+        return make_response(jsonify({"error": str(e)}), 404)
+
+
+##################################################
+# Weather Endpoints
+##################################################
+
+@app.route('/api/weather/<int:location_id>', methods=['GET'])
+def get_weather(location_id):
+    """
+    Fetch the weather for a specific location by ID.
+    """
+    try:
+        location = Location.get_location_by_id(location_id)
+        forecast = location.get_forecast()
+        return make_response(jsonify({"location": location.to_dict(), "forecast": forecast}), 200)
+    except Exception as e:
+        app.logger.error(f"Failed to fetch weather: {e}")
+        return make_response(jsonify({"error": str(e)}), 500)
+
+
+##################################################
+# Favorites Management
+##################################################
+
+@app.route('/api/favorites', methods=['GET', 'POST', 'DELETE'])
+def manage_favorites():
+    """
+    Manage user's favorite locations.
+    """
+    user_id = request.headers.get("User-ID")
+    if not user_id:
+        return make_response(jsonify({"error": "User ID is required"}), 401)
+    user_id = int(user_id)
+
+    favorites = FavoritesModel(user_id)
+
+    if request.method == 'GET':
+        try:
+            all_favorites = favorites.get_all_favorites()
+            return make_response(jsonify([location.to_dict() for location in all_favorites]), 200)
+        except ValueError as e:
+            return make_response(jsonify({"error": str(e)}), 404)
+
+    if request.method == 'POST':
+        data = request.get_json()
+        city = data.get('city')
+        latitude = data.get('latitude')
+        longitude = data.get('longitude')
+
+        if not city or latitude is None or longitude is None:
+            return make_response(jsonify({"error": "City, latitude, and longitude are required"}), 400)
+
+        try:
+            location = Location(len(favorites.favorites) + 1, city, latitude, longitude)
+            favorites.add_location_to_favorites(location)
+            return make_response(jsonify({"status": "success", "message": "Location added to favorites"}), 201)
+        except (TypeError, ValueError) as e:
+            return make_response(jsonify({"error": str(e)}), 400)
+
+    if request.method == 'DELETE':
+        data = request.get_json()
+        location_id = data.get('location_id')
+
+        if location_id is None:
+            return make_response(jsonify({"error": "Location ID is required"}), 400)
+
+        try:
+            favorites.remove_location_by_location_id(location_id)
+            return make_response(jsonify({"status": "success", "message": "Location removed from favorites"}), 200)
+        except ValueError as e:
+            return make_response(jsonify({"error": str(e)}), 404)
+
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5001)
