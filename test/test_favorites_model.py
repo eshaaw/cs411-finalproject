@@ -1,122 +1,132 @@
 import pytest
+from app import create_app
 from weather_app.models.favorites_model import FavoritesModel
 from weather_app.models.location_model import Location
-
-
-@pytest.fixture
-def favorites_model():
-    """Fixture to provide a new instance of FavoritesModel for each test."""
-    return FavoritesModel(user_id=1)
-
-
-"""Fixtures providing sample locations for the tests."""
-@pytest.fixture
-def sample_location1():
-    return Location(id=1, city="Los Angeles", latitude=34.0522, longitude=-118.2437)
+from weather_app.utils.db import db
 
 @pytest.fixture
-def sample_location2():
-    return Location(id=2, city="New York", latitude=40.7128, longitude=-74.0060)
+def app():
+    """
+    Test fixture to set up a Flask app context for testing.
+    """
+    app = create_app()  # Replace with your app factory function
+    app.config['TESTING'] = True
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'  # Use in-memory database for tests
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+    with app.app_context():
+        db.create_all()  # Create all tables
+        yield app
+        db.session.remove()
+        db.drop_all()
 
 @pytest.fixture
-def sample_favorites(sample_location1, sample_location2):
-    return [sample_location1, sample_location2]
+def setup_data(app):
+    """
+    Fixture to set up initial test data in the database.
+    """
+    with app.app_context():
+        db.create_all()  # Ensure all tables are created
 
+        # Add test locations
+        location1 = Location(city="Boston", latitude=42.3601, longitude=-71.0589)
+        location2 = Location(city="New York", latitude=40.7128, longitude=-74.0060)
+        db.session.add(location1)
+        db.session.add(location2)
 
-##################################################
-# Add Location Management Test Cases
-##################################################
+        # Commit test data to the database
+        db.session.commit()
 
-def test_add_location_to_favorites(favorites_model, sample_location1):
-    """Test adding a location to favorites."""
-    favorites_model.add_location_to_favorites(sample_location1)
-    assert len(favorites_model.favorites) == 1
-    assert favorites_model.favorites[0].city == "Los Angeles"
+        # Return created test data for use in tests
+        yield {"location1": location1, "location2": location2}
 
-def test_add_duplicate_location_to_favorites(favorites_model, sample_location1):
-    """Test error when adding a duplicate location to favorites by ID."""
-    favorites_model.add_location_to_favorites(sample_location1)
-    with pytest.raises(ValueError, match="Location with ID 1 already exists in favorites"):
-        favorites_model.add_location_to_favorites(sample_location1)
+        # Cleanup
+        db.session.remove()
+        db.drop_all()
 
+######################################################
+#    Add Favorites
+######################################################
 
-##################################################
-# Remove Location Management Test Cases
-##################################################
+def test_add_favorite_success(app, setup_data):
+    """
+    Test successfully adding a favorite.
+    """
+    with app.app_context():
+        location1 = setup_data["location1"]
+        FavoritesModel.add_favorite(user_id=1, location_id=location1.id)
 
-def test_remove_location_by_location_id(favorites_model, sample_favorites):
-    """Test removing a location from favorites by location ID."""
-    favorites_model.favorites.extend(sample_favorites)
-    assert len(favorites_model.favorites) == 2
+        # Verify the favorite was added
+        favorites = FavoritesModel.get_favorites_by_user_id(user_id=1)
+        assert len(favorites) == 1
+        assert favorites[0] == location1.id
 
-    favorites_model.remove_location_by_location_id(1)
-    assert len(favorites_model.favorites) == 1, f"Expected 1 location, but got {len(favorites_model.favorites)}"
-    assert favorites_model.favorites[0].id == 2, "Expected location with ID 2 to remain"
+def test_add_favorite_duplicate(app, setup_data):
+    """
+    Test adding a duplicate favorite raises an error.
+    """
+    with app.app_context():
+        location1 = setup_data["location1"]
+        FavoritesModel.add_favorite(user_id=1, location_id=location1.id)
 
-def test_remove_location_by_city_name(favorites_model, sample_favorites):
-    """Test removing a location from favorites by city name."""
-    favorites_model.favorites.extend(sample_favorites)
-    assert len(favorites_model.favorites) == 2
+        # Adding the same favorite should raise a ValueError
+        with pytest.raises(ValueError, match="Favorite already exists"):
+            FavoritesModel.add_favorite(user_id=1, location_id=location1.id)
 
-    favorites_model.remove_location_by_city_name("Los Angeles")
-    assert len(favorites_model.favorites) == 1, f"Expected 1 location, but got {len(favorites_model.favorites)}"
-    assert favorites_model.favorites[0].city == "New York", "Expected location to be New York"
+######################################################
+#    Retrieve Favorites
+######################################################
 
+def test_get_favorites_success(app, setup_data):
+    """
+    Test retrieving favorites for a user.
+    """
+    with app.app_context():
+        location1 = setup_data["location1"]
+        location2 = setup_data["location2"]
+        FavoritesModel.add_favorite(user_id=1, location_id=location1.id)
+        FavoritesModel.add_favorite(user_id=1, location_id=location2.id)
 
-##################################################
-# Favorites Retrieval Test Cases
-##################################################
+        # Verify the favorites are retrieved correctly
+        favorites = FavoritesModel.get_favorites_by_user_id(user_id=1)
+        assert len(favorites) == 2
+        assert location1.id in favorites
+        assert location2.id in favorites
 
-def test_get_all_favorites(favorites_model, sample_favorites):
-    """Test successfully retrieving all favorite locations."""
-    favorites_model.favorites.extend(sample_favorites)
+def test_get_favorites_empty(app):
+    """
+    Test retrieving favorites for a user with no favorites raises an error.
+    """
+    with app.app_context():
+        with pytest.raises(ValueError, match="Favorites list is empty"):
+            FavoritesModel.get_favorites_by_user_id(user_id=1)
 
-    all_favorites = favorites_model.get_all_favorites()
-    assert len(all_favorites) == 2
-    assert all_favorites[0].id == 1
-    assert all_favorites[1].id == 2
+######################################################
+#    Remove Favorites
+######################################################
 
-def test_get_favorite_by_id(favorites_model, sample_location1):
-    """Test successfully retrieving a favorite by location ID."""
-    favorites_model.add_location_to_favorites(sample_location1)
+def test_remove_favorite_success(app, setup_data):
+    """
+    Test successfully removing a favorite.
+    """
+    with app.app_context():
+        location1 = setup_data["location1"]
+        FavoritesModel.add_favorite(user_id=1, location_id=location1.id)
 
-    retrieved_location = favorites_model.get_favorite_by_id(1)
+        # Remove the favorite
+        FavoritesModel.remove_favorite(user_id=1, location_id=location1.id)
 
-    assert retrieved_location.id == 1
-    assert retrieved_location.city == "Los Angeles"
-    assert retrieved_location.latitude == 34.0522
-    assert retrieved_location.longitude == -118.2437
+        # Verify the favorite was removed
+        with pytest.raises(ValueError, match="Favorites list is empty"):
+            FavoritesModel.get_favorites_by_user_id(user_id=1)
 
+def test_remove_favorite_not_found(app, setup_data):
+    """
+    Test removing a favorite that does not exist raises an error.
+    """
+    with app.app_context():
+        location1 = setup_data["location1"]
 
-##################################################
-# Utility Function Test Cases
-##################################################
-
-def test_check_if_empty_non_empty_favorites(favorites_model, sample_location1):
-    """Test check_if_empty does not raise error if favorites list is not empty."""
-    favorites_model.add_location_to_favorites(sample_location1)
-    try:
-        favorites_model.check_if_empty()
-    except ValueError:
-        pytest.fail("check_if_empty raised ValueError unexpectedly on non-empty favorites list")
-
-def test_check_if_empty_empty_favorites(favorites_model):
-    """Test check_if_empty raises error when favorites list is empty."""
-    with pytest.raises(ValueError, match="Favorites list is empty"):
-        favorites_model.check_if_empty()
-
-def test_validate_location_id(favorites_model, sample_location1):
-    """Test validate_location_id does not raise error for valid location ID."""
-    favorites_model.add_location_to_favorites(sample_location1)
-    try:
-        favorites_model.validate_location_id(1)
-    except ValueError:
-        pytest.fail("validate_location_id raised ValueError unexpectedly for valid location ID")
-
-def test_validate_location_id_invalid_id(favorites_model):
-    """Test validate_location_id raises error for invalid location ID."""
-    with pytest.raises(ValueError, match="Invalid location ID: -1"):
-        favorites_model.validate_location_id(-1)
-
-    with pytest.raises(ValueError, match="Invalid location ID: invalid"):
-        favorites_model.validate_location_id("invalid")
+        # Attempt to remove a non-existent favorite
+        with pytest.raises(ValueError, match="Favorite does not exist"):
+            FavoritesModel.remove_favorite(user_id=1, location_id=location1.id)
