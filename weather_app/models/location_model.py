@@ -1,110 +1,112 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 import logging
-from weather_app.utils.api_utils import fetch_air_quality_data, fetch_historical_data, fetch_forecast
-from weather_app.utils.sql_utils import get_db_connection
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import validates
+from weather_app.utils.db import db
+from weather_app.utils.api_utils import fetch_air_quality_data, fetch_forecast, fetch_historical_data
 from weather_app.utils.logger import configure_logger
 
 logger = logging.getLogger(__name__)
 configure_logger(logger)
 
+
 @dataclass
-class Location:
-    id: int
-    city: str
-    latitude: float
-    longitude: float
+class Location(db.Model):
+    __tablename__ = 'locations'
 
-    def __post_init__(self):
-        # Validate latitude and longitude values
-        if not (-90 <= self.latitude <= 90) or not (-180 <= self.longitude <= 180):
-            raise ValueError(f"Invalid latitude or longitude: {self.latitude}, {self.longitude}")
+    id: int = db.Column(db.Integer, primary_key=True)
+    city: str = db.Column(db.String(80), nullable=False)
+    latitude: float = db.Column(db.Float, nullable=False)
+    longitude: float = db.Column(db.Float, nullable=False)
 
-    def to_dict(self):
+    @validates('latitude', 'longitude')
+    def validate_coordinates(self, key, value):
+        """
+        Validates latitude and longitude values.
+        """
+        if key == 'latitude' and not (-90 <= value <= 90):
+            raise ValueError(f"Invalid latitude: {value}. Must be between -90 and 90.")
+        if key == 'longitude' and not (-180 <= value <= 180):
+            raise ValueError(f"Invalid longitude: {value}. Must be between -180 and 180.")
+        return value
+
+    @classmethod
+    def create_location(cls, city: str, latitude: float, longitude: float) -> 'Location':
+        """
+        Adds a new location to the database.
+        """
+        try:
+            location = cls(city=city, latitude=latitude, longitude=longitude)
+            db.session.add(location)
+            db.session.commit()
+            logger.info("Location created successfully: %s", asdict(location))
+            return location
+        except IntegrityError as e:
+            db.session.rollback()
+            logger.error("Database integrity error: %s", str(e))
+            raise ValueError("Location already exists or integrity error occurred.")
+        except Exception as e:
+            db.session.rollback()
+            logger.error("Error creating location: %s", str(e))
+            raise
+
+    @classmethod
+    def delete_location(cls, location_id: int) -> None:
+        """
+        Deletes a location by marking it as removed.
+        """
+        location = cls.query.filter_by(id=location_id).first()
+        if not location:
+            logger.info("Location with ID %s not found", location_id)
+            raise ValueError(f"Location {location_id} not found.")
+
+        db.session.delete(location)
+        db.session.commit()
+        logger.info("Location with ID %s deleted successfully.", location_id)
+
+    @classmethod
+    def get_location_by_id(cls, location_id: int) -> dict:
+        """
+        Retrieves a location by its ID.
+        """
+        logger.info("Retrieving location by ID: %d", location_id)
+        location = cls.query.filter_by(id=location_id).first()
+        if not location:
+            logger.error("Location with ID %s not found", location_id)
+            raise ValueError(f"Location {location_id} not found.")
+        return location
+
+    @classmethod
+    def get_all_locations(cls) -> list[dict]:
+        """
+        Retrieves all locations from the database.
+        """
+        logger.info("Retrieving all locations.")
+        locations = cls.query.all()
+        return [asdict(location) for location in locations]
+    
+    @classmethod
+    def get_weather(self) -> dict:
+        """
+        Fetches weather forecast for this location using its latitude and longitude.
+
+        Returns:
+            dict: Weather forecast data.
+        """
+        try:
+            forecast_data = fetch_forecast(self.latitude, self.longitude)
+            return forecast_data
+        except Exception as e:
+            logger.error("Error fetching forecast for location %s: %s", self.city, str(e))
+            raise
+
+    def to_dict(self) -> dict:
+        """
+        Converts the Location instance into a dictionary.
+        """
         return {
             "id": self.id,
             "city": self.city,
             "latitude": self.latitude,
             "longitude": self.longitude
         }
-
-    def get_air_quality(self):
-        """
-        Fetches the current air quality for this location from an external API.
-        """
-        try:
-            air_quality = fetch_air_quality_data(self.latitude, self.longitude)
-            return air_quality
-        except Exception as e:
-            logger.error("Error fetching air quality for %s: %s", self.city, str(e))
-            raise e
-
-    def get_historical_weather(self):
-        """
-        Fetches historical weather data for this location from an external API.
-        """
-        try:
-            historical_data = fetch_historical_data(self.latitude, self.longitude)
-            return historical_data
-        except Exception as e:
-            logger.error("Error fetching historical weather for %s: %s", self.city, str(e))
-            raise e
-
-    def get_forecast(self):
-        """
-        Fetches a weather forecast for this location from an external API.
-        """
-        try:
-            forecast_data = fetch_forecast(self.latitude, self.longitude)
-            return forecast_data
-        except Exception as e:
-            logger.error("Error fetching forecast for %s: %s", self.city, str(e))
-            raise e
-
-    @staticmethod
-    def create_location(city: str, latitude: float, longitude: float) -> 'Location':
-        """
-        Adds a new location to the database.
-
-        Args:
-            city (str): The city of the location.
-            latitude (float): The latitude of the location.
-            longitude (float): The longitude of the location.
-
-        Returns:
-            Location: The created Location object with its ID populated.
-        """
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                INSERT INTO locations (city, latitude, longitude)
-                VALUES (?, ?, ?)
-            """, (city, latitude, longitude))
-            conn.commit()
-            location_id = cursor.lastrowid
-            logger.info("Created new location: %s with ID %d", city, location_id)
-            return Location(id=location_id, city=city, latitude=latitude, longitude=longitude)
-
-    @staticmethod
-    def get_location_by_id(location_id: int) -> 'Location':
-        """
-        Retrieves a location by its ID.
-
-        Args:
-            location_id (int): The ID of the location.
-
-        Returns:
-            Location: The location corresponding to the given ID.
-        """
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT id, city, latitude, longitude
-                FROM locations
-                WHERE id = ?
-            """, (location_id,))
-            row = cursor.fetchone()
-            if row:
-                return Location(id=row[0], city=row[1], latitude=row[2], longitude=row[3])
-            else:
-                logger.error("Location with ID %d not found", location_id)
-                raise ValueError(f"Location with ID {location_id} not found")

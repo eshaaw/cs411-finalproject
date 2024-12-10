@@ -8,8 +8,8 @@ logger = logging.getLogger(__name__)
 configure_logger(logger)
 
 # Base URLs for the APIs
-BASE_URL_AIR_QUALITY = "http://api.openweathermap.org/data/2.5/air_pollution"
-BASE_URL_WEATHER = "http://api.openweathermap.org/data/2.5/onecall"
+BASE_URL_AIR_QUALITY = "http://api.openweathermap.org/data/3.0/air_pollution"
+BASE_URL_WEATHER = "http://api.openweathermap.org/data/3.0/onecall"
 
 # API Key from environment variables
 API_KEY = os.getenv("API_KEY")
