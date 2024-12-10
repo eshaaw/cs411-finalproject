@@ -1,124 +1,177 @@
 # cs411-finalproject
 Weather App
-Overview
+Overview:
 The Weather App is a Flask-based application that provides weather data for cities worldwide using the OpenWeather API. It includes functionality to manage a user's collection of favorite locations and supports CRUD operations for favorites.
 
-Features
-1. User Management
-Create User: Register a new user with a username and password.
-Delete User: Remove a user from the database by username.
-Login: Authenticate a user using their username and password.
-2. Weather API
-Fetch weather data (currently placeholder functionality, can be extended to include real weather APIs).
-3. Health Check
-Verify the application's health and server status.
-4. Database Management
-Initialize the database by creating or recreating all tables.
-Endpoints
-Health Check
-GET /api/health:
-Response: {"status": "healthy"}
-User Management
-POST /api/create-user:
+Features:
+Weather Data Retrieval: Get real-time weather forecasts and historical data for any location.
+Air Quality Monitoring: Fetch current air quality data, including AQI and pollutant details.
+User Authentication: Secure login system to manage personalized features.
+Favorites Management: Add, view, and remove favorite locations.
+Database Health Checks: Verify database connectivity and table existence.
 
-Request: {"username": "your_username", "password": "your_password"}
-Response: {"status": "user added", "username": "your_username"}
-DELETE /api/delete-user:
+API Endpoints
+This application exposes RESTful API endpoints for interacting with the weather services and managing user data.
 
-Request: {"username": "your_username"}
-Response: {"status": "user deleted", "username": "your_username"}
-POST /api/login:
+Routes and Their Descriptions
+Health Check Routes
+1. Health Check
+Route Name: /api/health
+Request Type: GET
+Purpose: Verifies that the service is running.
+Response Format:
+{
+    "status": "healthy"
+}
+Example:
+curl http://localhost:5000/api/health
+2. Database Check
+Route Name: /api/db-check
+Request Type: GET
+Purpose: Checks database connectivity and ensures required tables exist.
+Response Format:
+{
+    "database_status": "healthy"
+}
+Example:
+curl http://localhost:5000/api/db-check
+Location Management Routes
+1. Add Location
+Route Name: /api/location
+Request Type: POST
+Purpose: Adds a new location to the database.
+Request Format:
+{
+    "city": "London",
+    "latitude": 51.5074,
+    "longitude": -0.1278
+}
+Response Format:
+{
+    "status": "success",
+    "location": {
+        "id": 1,
+        "city": "London",
+        "latitude": 51.5074,
+        "longitude": -0.1278
+    }
+}
+Example:
+curl -X POST -H "Content-Type: application/json" -d '{"city": "London", "latitude": 51.5074, "longitude": -0.1278}' http://localhost:5000/api/location
+2. Get Location by ID
+Route Name: /api/location/<id>
+Request Type: GET
+Purpose: Retrieves details for a specific location by ID.
+Response Format:
+{
+    "id": 1,
+    "city": "London",
+    "latitude": 51.5074,
+    "longitude": -0.1278
+}
+Example:
+curl http://localhost:5000/api/location/1
+Weather Data Routes
+1. Fetch Air Quality Data
+Route Name: /api/weather/air-quality/<id>
+Request Type: GET
+Purpose: Retrieves current air quality data for a location by ID.
+Response Format:
+{
+    "aqi": 2,
+    "pollutants": {
+        "co": 0.3,
+        "no2": 5.2,
+        "o3": 0.9
+    }
+}
+Example:
+curl http://localhost:5000/api/weather/air-quality/1
+2. Fetch Historical Weather Data
+Route Name: /api/weather/historical/<id>
+Request Type: GET
+Purpose: Retrieves historical weather data for a location by ID.
+Response Format:
+{
+    "historical_data": {
+        "temperature": 15.2,
+        "humidity": 78
+    }
+}
+Example:
+curl http://localhost:5000/api/weather/historical/1
+3. Fetch Weather Forecast
+Route Name: /api/weather/forecast/<id>
+Request Type: GET
+Purpose: Retrieves a 7-day weather forecast for a location by ID.
+Response Format:
+{
+    "forecast": {
+        "day1": {"temp": 14, "condition": "Sunny"},
+        "day2": {"temp": 15, "condition": "Cloudy"}
+    }
+}
+Example:
+curl http://localhost:5000/api/weather/forecast/1
+Favorites Management Routes
+1. Get All Favorites
+Route Name: /api/favorites
+Request Type: GET
+Purpose: Retrieves all favorite locations for the logged-in user.
+Response Format:
+[
+    {
+        "id": 1,
+        "city": "London",
+        "latitude": 51.5074,
+        "longitude": -0.1278
+    }
+]
+Example:
+curl -H "User-ID: 123" http://localhost:5001/api/favorites
+2. Add to Favorites
+Route Name: /api/favorites
+Request Type: POST
+Purpose: Adds a location to the user's favorites.
+Request Format:
+{
+    "city": "London",
+    "latitude": 51.5074,
+    "longitude": -0.1278
+}
+Response Format:
+{
+    "status": "success",
+    "message": "Location added to favorites"
+}
+Example:
+curl -X POST -H "Content-Type: application/json" -d '{"city": "London", "latitude": 51.5074, "longitude": -0.1278}' http://localhost:5001/api/favorites
 
-Request: {"username": "your_username", "password": "your_password"}
-Response: {"message": "Login successful"}
-Database Management
-POST /api/init-db:
-Response: {"status": "success", "message": "Database initialized successfully."}
-Weather API
-GET /api/weather:
-Response: {"status": "success", "weather": "Sunny, 25°C"}
-Installation
-Prerequisites
-Python 3.8+
-pip (Python package manager)
-SQLite (pre-installed in Python)
-Steps
+3. Remove from Favorites
+Route Name: /api/favorites
+Request Type: DELETE
+Purpose: Removes a location from the user's favorites by ID.
+Request Format:
+{
+    "location_id": 1
+}
+Response Format:
+{
+    "status": "success",
+    "message": "Location removed from favorites"
+}
+Example:
+curl -X DELETE -H "Content-Type: application/json" -d '{"location_id": 1}' http://localhost:5001/api/favorites
+
+Setup Instructions
+Environment Variables: Set up an .env file with the following:
+API_KEY=6ac72ba90c795f7036e775e9b1cc90cf
+Running the App:
 Clone the repository:
-
-bash
-Copy code
-git clone https://github.com/eshaaw/cs411-finalproject.git
+git clone <repository-url>
 cd weather-app
-Create a virtual environment and activate it:
 
-bash
-Copy code
-python3 -m venv venv
-source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
-Install dependencies:
-
-bash
-Copy code
-pip install -r requirements.txt
-Set up environment variables:
-
-Create a .env file in the root directory with the following content:
-makefile
-Copy code
-FLASK_APP=app.py
-FLASK_ENV=development
-Initialize the database:
-
-bash
-Copy code
-flask run --host=0.0.0.0 --port=5000
-Use the /api/init-db endpoint to initialize the database tables.
-Run the application:
-
-bash
-Copy code
-flask run
-Access the app at: http://localhost:5000
-
-Testing
-Run Unit Tests
-To run the unit tests, execute:
-
-bash
-Copy code
-pytest
-Project Structure
-bash
-Copy code
-weather-app/
-│
-├── weather_app/                  # Application code
-│   ├── models/                   # Database models
-│   │   ├── user_model.py
-│   │   ├── login_route.py
-│   │
-│   ├── utils/                    # Utility modules
-│   │   ├── db.py                 # Database connection
-│   │   ├── sql_utils.py          # SQL utility functions
-│   │
-│   ├── __init__.py               # Initialize Flask app
-│   └── app.py                    # Main application entry point
-│
-├── tests/                        # Unit tests
-│   ├── test_login_route.py
-│   ├── test_user_model.py
-│
-├── .env                          # Environment variables
-├── requirements.txt              # Python dependencies
-└── README.md                     # Documentation
-Contributing
-Fork the repository.
-Create a new branch for your feature:
-bash
-Copy code
-git checkout -b feature-name
-Commit your changes and push to the branch:
-bash
-Copy code
-git push origin feature-name
-Open a pull request.
+Build and run the Docker container:
+docker build -t weather-app .
+docker run -p 5000:5000 weather-app
+Access the app at http://localhost:5001.
