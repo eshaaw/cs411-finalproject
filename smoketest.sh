@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Define the base URL for the Weather API
-BASE_URL="http://localhost:5001"
+# Define the base URL for the Flask API
+BASE_URL="http://localhost:5002/api"
 
 # Flag to control whether to echo JSON output
 ECHO_JSON=false
@@ -17,131 +17,204 @@ done
 
 ###############################################
 #
-# Health checks
+# Health Checks
 #
 ###############################################
 
-# Function to check the health of the service
 check_health() {
   echo "Checking health status..."
-  response=$(curl -s -X GET "$BASE_URL/api/health")
-  echo "Response: $response"  # Add this line to debug
-  echo "$response" | grep -q '"status": "healthy"'
-  if [ $? -eq 0 ]; then
+  response=$(curl -s -X GET "$BASE_URL/health")
+  if echo "$response" | grep -q '"status": "healthy"'; then
     echo "Service is healthy."
   else
-    echo "Health check failed."
+    echo "Health check failed. Response: $response"
     exit 1
   fi
 }
 
-# Function to check the weather API status
-check_api_status() {
-  echo "Checking weather API status..."
-  curl -s -X GET "$BASE_URL/status" | grep -q '"status": "ok"'
-  if [ $? -eq 0 ]; then
-    echo "API is responding."
+check_db() {
+  echo "Checking database connection..."
+  response=$(curl -s -X GET "$BASE_URL/db-check")
+  if echo "$response" | grep -q '"database_status": "healthy"'; then
+    echo "Database connection is healthy."
   else
-    echo "API check failed."
+    echo "Database check failed. Response: $response"
     exit 1
   fi
 }
 
-##########################################################
+###############################################
 #
-# Weather Information Retrieval
+# User Management
 #
-##########################################################
+###############################################
 
-# Function to get current weather by city
-get_weather_by_city() {
+create_user() {
+  username=$1
+  password=$2
+
+  echo "Creating user ($username)..."
+  response=$(curl -s -X POST "$BASE_URL/create-user" -H "Content-Type: application/json" \
+    -d "{\"username\":\"$username\", \"password\":\"$password\"}")
+  if echo "$response" | grep -q '"status": "success"'; then
+    echo "User created successfully."
+  else
+    echo "Failed to create user. Response: $response"
+    exit 1
+  fi
+}
+
+delete_user() {
+  username=$1
+
+  echo "Deleting user ($username)..."
+  response=$(curl -s -X DELETE "$BASE_URL/delete-user/$username")
+  if echo "$response" | grep -q '"status": "success"'; then
+    echo "User deleted successfully."
+  else
+    echo "Failed to delete user. Response: $response"
+    exit 1
+  fi
+}
+
+###############################################
+#
+# Location Management
+#
+###############################################
+
+create_location() {
   city=$1
+  latitude=$2
+  longitude=$3
 
-  echo "Getting weather for city: $city..."
-  response=$(curl -s -X GET "$BASE_URL/weather?city=$city")
-  if [ $? -eq 0 ]; then
-    echo "Weather data retrieved successfully for $city."
-    echo "$response"
+  echo "Creating location ($city)..."
+  response=$(curl -s -X POST "$BASE_URL/create-location" -H "Content-Type: application/json" \
+    -d "{\"city\":\"$city\", \"latitude\":$latitude, \"longitude\":$longitude}")
+  if echo "$response" | grep -q '"status": "success"'; then
+    echo "Location created successfully."
   else
-    echo "Failed to get weather for $city."
+    echo "Failed to create location. Response: $response"
     exit 1
   fi
 }
 
-# Function to get weather forecast by city
-get_forecast_by_city() {
-  city=$1
+get_location() {
+  location_id=$1
 
-  echo "Getting weather forecast for city: $city..."
-  response=$(curl -s -X GET "$BASE_URL/forecast?city=$city")
-  if [ $? -eq 0 ]; then
-    echo "Weather forecast retrieved successfully for $city."
-    echo "$response"
+  echo "Getting location by ID ($location_id)..."
+  response=$(curl -s -X GET "$BASE_URL/get-location/$location_id")
+  if echo "$response" | grep -q '"status": "success"'; then
+    echo "Location retrieved successfully."
   else
-    echo "Failed to get forecast for $city."
+    echo "Failed to get location. Response: $response"
     exit 1
   fi
 }
 
-##########################################################
+###############################################
 #
-# Location-Based Weather Information
+# Weather and Air Quality
 #
-##########################################################
+###############################################
 
-# Function to get weather by geographical coordinates
-get_weather_by_coords() {
-  lat=$1
-  lon=$2
+get_weather() {
+  location_id=$1
 
-  echo "Getting weather for coordinates ($lat, $lon)..."
-  response=$(curl -s -X GET "$BASE_URL/weather?lat=$lat&lon=$lon")
-  if [ $? -eq 0 ]; then
-    echo "Weather data retrieved successfully for coordinates ($lat, $lon)."
-    echo "$response"
+  echo "Getting weather for location ID ($location_id)..."
+  response=$(curl -s -X GET "$BASE_URL/get-weather/$location_id")
+  if echo "$response" | grep -q '"status": "success"'; then
+    echo "Weather data retrieved successfully."
   else
-    echo "Failed to get weather for coordinates ($lat, $lon)."
+    echo "Failed to get weather. Response: $response"
     exit 1
   fi
 }
 
-##########################################################
-#
-# Weather Alerts
-#
-##########################################################
+get_air_quality() {
+  location_id=$1
 
-# Function to get weather alerts
-get_weather_alerts() {
-  city=$1
-
-  echo "Getting weather alerts for city: $city..."
-  response=$(curl -s -X GET "$BASE_URL/alerts?city=$city")
-  if [ $? -eq 0 ]; then
-    echo "Weather alerts retrieved successfully for $city."
-    echo "$response"
+  echo "Getting air quality for location ID ($location_id)..."
+  response=$(curl -s -X GET "$BASE_URL/get-air-quality/$location_id")
+  if echo "$response" | grep -q '"status": "success"'; then
+    echo "Air quality data retrieved successfully."
   else
-    echo "Failed to get weather alerts for $city."
+    echo "Failed to get air quality. Response: $response"
     exit 1
   fi
 }
 
-##########################################################
+###############################################
 #
-# Data Cleanup (Optional)
+# Favorites Management
 #
-##########################################################
+###############################################
 
-# Function to clear weather data
-clear_weather_data() {
-  echo "Clearing all weather data..."
-  curl -s -X DELETE "$BASE_URL/clear-weather" | grep -q '"status": "success"'
-  if [ $? -eq 0 ]; then
-    echo "Weather data cleared successfully."
+add_favorite() {
+  user_id=$1
+  location_id=$2
+
+  echo "Adding location ID ($location_id) to user ID ($user_id)'s favorites..."
+  response=$(curl -s -X POST "$BASE_URL/add-favorite" -H "Content-Type: application/json" \
+    -d "{\"user_id\":$user_id, \"location_id\":$location_id}")
+  if echo "$response" | grep -q '"status": "success"'; then
+    echo "Location added to favorites successfully."
   else
-    echo "Failed to clear weather data."
+    echo "Failed to add location to favorites. Response: $response"
     exit 1
   fi
 }
 
-## HAVE TO ADD TEST FOR OUT 5 FUNCTIONALITIES
+get_favorites() {
+  user_id=$1
+
+  echo "Getting favorites for user ID ($user_id)..."
+  response=$(curl -s -X GET "$BASE_URL/get-favorites/$user_id")
+  if echo "$response" | grep -q '"status": "success"'; then
+    echo "Favorites retrieved successfully."
+  else
+    echo "Failed to get favorites. Response: $response"
+    exit 1
+  fi
+}
+
+remove_favorite() {
+  user_id=$1
+  location_id=$2
+
+  echo "Removing location ID ($location_id) from user ID ($user_id)'s favorites..."
+  response=$(curl -s -X DELETE "$BASE_URL/remove-favorite/$user_id/$location_id")
+  if echo "$response" | grep -q '"status": "success"'; then
+    echo "Location removed from favorites successfully."
+  else
+    echo "Failed to remove location from favorites. Response: $response"
+    exit 1
+  fi
+}
+
+###############################################
+#
+# Test Execution
+#
+###############################################
+
+# Health Checks
+check_health
+check_db
+
+# User Management
+create_user "testuser" "password123"
+delete_user "testuser"
+
+# Location Management
+create_location "Boston" 42.3601 -71.0589
+get_location 1
+
+# Weather Retrieval
+
+# Favorites Management
+add_favorite 1 1
+get_favorites 1
+remove_favorite 1 1
+
+echo "All tests passed successfully!"
