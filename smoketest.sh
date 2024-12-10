@@ -34,9 +34,9 @@ check_health() {
 
 check_api() {
   echo "Checking API status"
-  TEST_URL = "$BASE_URL/api/health"
-  response= $(curl -x -X GET "$TEST_URL")
-  if echo "$response" | grep -q "api status": "healthy"; then
+  TEST_URL="$BASE_URL/health"
+  response=$(curl -s -X GET "$TEST_URL")
+  if echo "$response" | grep -q '"status": "healthy"'; then
     echo "api connection is healthy"
   else
     echo "api check failed. Response: $response"
@@ -211,6 +211,7 @@ remove_favorite() {
 ###############################################
 
 # Health Checks
+check_api
 check_health
 check_db
 
