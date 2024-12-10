@@ -6,9 +6,33 @@ from weather_app.models.user_model import Users
 from weather_app.utils.sql_utils import get_db_connection
 from weather_app.utils.db import db
 from weather_app.models.login_route import auth_bp
-
+import requests
 # Load environment variables from .env file
 load_dotenv()
+app = Flask(__name__)
+
+OPENWEATHER_API_KEY = "2a53a7421f5ed14502cef8026fe343b5"
+OPENWEATHER_BASE_URL = "http://api.openweathermap.org/data/2.5/air_pollution"
+
+@app.route('/status', methods=['GET'])
+def status():
+    try:
+        # Optionally check connectivity to OpenWeather API
+        response = requests.get(
+            OPENWEATHER_BASE_URL,
+            params={"q": "London", "appid": OPENWEATHER_API_KEY},
+            timeout=5
+        )
+        if response.status_code == 200:
+            return jsonify({"status": "ok", "message": "Application is running and connected to OpenWeather API"}), 200
+        else:
+            return jsonify({"status": "error", "message": "Failed to connect to OpenWeather API"}), 503
+    except requests.RequestException as e:
+        return jsonify({"status": "error", "message": "OpenWeather API is unreachable", "error": str(e)}), 503
+
+if __name__ == "__main__":
+    app = create_app()
+    app.run(debug=True, host="0.0.0.0", port=5001)
 
 
 def create_app():
@@ -188,9 +212,24 @@ def create_app():
 
 app = Flask(__name__)
 
+OPENWEATHER_API_KEY = "2a53a7421f5ed14502cef8026fe343b5"
+OPENWEATHER_BASE_URL = "http://api.openweathermap.org/data/2.5/air_pollution"
+
 @app.route('/status', methods=['GET'])
 def status():
-    return jsonify({"status": "ok", "message": "Application is running"}), 200
+    try:
+        # Optionally check connectivity to OpenWeather API
+        response = requests.get(
+            OPENWEATHER_BASE_URL,
+            params={"q": "London", "appid": OPENWEATHER_API_KEY},
+            timeout=5
+        )
+        if response.status_code == 200:
+            return jsonify({"status": "ok", "message": "Application is running and connected to OpenWeather API"}), 200
+        else:
+            return jsonify({"status": "error", "message": "Failed to connect to OpenWeather API"}), 503
+    except requests.RequestException as e:
+        return jsonify({"status": "error", "message": "OpenWeather API is unreachable", "error": str(e)}), 503
 
 if __name__ == "__main__":
     app = create_app()
