@@ -224,6 +224,8 @@ create_location "Boston" 42.3601 -71.0589
 get_location 1
 
 # Weather Retrieval
+get_weather 1
+get_air_quality 1
 
 # Favorites Management
 add_favorite 1 1
