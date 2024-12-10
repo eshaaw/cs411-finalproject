@@ -168,7 +168,7 @@ Environment Variables: Set up an .env file with the following:
 API_KEY=6ac72ba90c795f7036e775e9b1cc90cf
 Running the App:
 Clone the repository:
-git clone <repository-url>
+git clone <https://github.com/eshaaw/cs411-finalproject.git>
 cd weather-app
 
 Build and run the Docker container:
