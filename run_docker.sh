@@ -1,7 +1,6 @@
 #!/bin/bash
 
 # Variables
-IMAGE_NAME="weather_app" 
 CONTAINER_TAG="0.2.0"
 HOST_PORT=5001
 CONTAINER_PORT=5000
@@ -16,7 +15,6 @@ else
   echo "Skipping Docker image build..."
 fi
 
-# Check if the database directory exists; if not, create it
 if [ ! -d "${DB_VOLUME_PATH}" ]; then
   echo "Creating database directory at ${DB_VOLUME_PATH}..."
   mkdir -p ${DB_VOLUME_PATH}

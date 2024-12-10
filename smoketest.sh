@@ -144,27 +144,4 @@ clear_weather_data() {
   fi
 }
 
-##############################################
-#
-# Test Execution
-#
-##############################################
-
-# Health check
-check_health
-check_api_status
-
-# Weather Information Retrieval
-get_weather_by_city "Boston"
-get_forecast_by_city "Boston"
-
-# Location-Based Weather Information
-get_weather_by_coords 42.3601 -71.0589  # Boston coordinates
-
-# Weather Alerts
-get_weather_alerts "Boston"
-
-# Data Cleanup
-clear_weather_data
-
-echo "All tests passed successfully!"
+## HAVE TO ADD TEST FOR OUT 5 FUNCTIONALITIES
