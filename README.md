@@ -4,7 +4,7 @@ Overview:
 The Weather App is a Flask-based application that provides weather data for cities worldwide using the OpenWeather API. It includes functionality to manage a user's collection of favorite locations and supports CRUD operations for favorites.
 
 **NOTE:
-The API key we received from OpenWeather API is currently not authorized for access and manual calls to it have been returning a 401 error (Invalid subscription plan). The call itself has been going through in the smoketests but has been failing because of this 401 error retrieval. We assume it may be a problem with using the free subscription instead of the paid version.
+The API key we received from OpenWeather API is currently not authorized for access and manual calls to it have been returning a 401 error (Invalid subscription plan). The call itself has been going through in the smoketests but has been failing because of this 401 error retrieval (get_weather, get_air_quality). We assume it may be a problem with using the free subscription instead of the paid version.
 
 Features:
 Weather Data Retrieval: Get real-time weather forecasts and historical data for any location.
